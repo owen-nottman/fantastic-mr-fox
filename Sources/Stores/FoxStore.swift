@@ -1,6 +1,5 @@
 import Foundation
 import AppKit
-import ScreenCaptureKit
 import Observation
 
 /// Central state machine for FoxBuddy.
@@ -8,122 +7,21 @@ import Observation
 @Observable
 final class FoxStore {
 
-    // MARK: - Fox mascot state
+    // MARK: - State
 
-    /// Drives the fox emoji animation and bubble visibility.
+    /// Drives fox animation and bubble visibility.
     var foxState: FoxState = .idle
 
     /// The current speech bubble. Non-nil while the fox is speaking.
     var bubble: SpeechBubble?
 
-    // MARK: - Input panel state
+    // MARK: - Trigger
 
-    /// True while the floating input panel is visible.
-    var showInputPanel = false
-
-    /// The text the user has typed in the input field.
-    var promptText = ""
-
-    // MARK: - Window attachment state
-
-    /// The SCWindow the user selected from the picker. Captured on submit.
-    var selectedWindow: SCWindow?
-
-    /// Thumbnail shown in the input panel to confirm the attachment.
-    var selectedWindowThumbnail: NSImage?
-
-    // MARK: - Window picker state
-
-    /// True while the window picker sheet is visible.
-    var showWindowPicker = false
-
-    /// Windows loaded for the picker, with pre-fetched thumbnails.
-    var availableWindows: [WindowInfo] = []
-
-    /// True while window thumbnails are being fetched.
-    var isLoadingWindows = false
-
-    // MARK: - Input panel lifecycle
-
-    func openInputPanel() {
-        promptText = ""
-        selectedWindow = nil
-        selectedWindowThumbnail = nil
-        showInputPanel = true
-    }
-
-    func closeInputPanel() {
-        showInputPanel = false
-        showWindowPicker = false
-    }
-
-    // MARK: - Window picker
-
-    func openWindowPicker() {
-        showWindowPicker = true
-        Task { await loadWindows() }
-    }
-
-    private func loadWindows() async {
-        await MainActor.run { isLoadingWindows = true }
-        defer { Task { @MainActor in self.isLoadingWindows = false } }
-
-        do {
-            let windows = try await ScreenCaptureService.shared.getWindowInfos()
-            await MainActor.run { self.availableWindows = windows }
-        } catch {
-            // Permission denied or no windows — show empty state in picker
-            await MainActor.run { self.availableWindows = [] }
-            print("[FoxBuddy] Window enumeration failed: \(error)")
-        }
-    }
-
-    func selectWindow(_ info: WindowInfo) {
-        selectedWindow = info.window
-        selectedWindowThumbnail = info.thumbnail
-        showWindowPicker = false
-    }
-
-    func clearSelectedWindow() {
-        selectedWindow = nil
-        selectedWindowThumbnail = nil
-    }
-
-    // MARK: - Submit
-
-    /// Called when the user presses Return or the send button.
-    /// Closes the input panel immediately so the user's workflow is unblocked,
-    /// then captures the window and calls Claude in the background.
-    func submit() {
-        let prompt = promptText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !prompt.isEmpty else { return }
-
-        let window = selectedWindow
-        closeInputPanel()
-        foxState = .thinking
-        bubble = nil
-
-        Task {
-            do {
-                // Capture the selected window at full resolution for the API
-                var image: NSImage? = nil
-                if let window {
-                    image = try await ScreenCaptureService.shared.captureWindow(window)
-                }
-                let response = try await ClaudeAPIService.shared.ask(prompt: prompt, image: image)
-                await MainActor.run {
-                    self.foxState = .speaking
-                    self.bubble = SpeechBubble(content: response)
-                    self.scheduleDismiss()
-                }
-            } catch {
-                await MainActor.run {
-                    self.foxState = .error(error.localizedDescription)
-                    self.bubble = SpeechBubble(content: "Oops — \(error.localizedDescription)")
-                    self.scheduleDismiss()
-                }
-            }
-        }
+    /// Starts the full capture → input → Claude → bubble flow.
+    /// Safe to call from any sync context; the async work runs in a Task.
+    func trigger() {
+        guard foxState == .idle || foxState == .sleeping || foxState == .stretching else { return }
+        Task { @MainActor in await runFlow() }
     }
 
     // MARK: - Bubble dismiss
@@ -131,12 +29,73 @@ final class FoxStore {
     func dismissBubble() {
         dismissTask?.cancel()
         bubble = nil
-        foxState = .idle
+        transitionToIdle()
     }
 
     // MARK: - Private
 
     private var dismissTask: Task<Void, Never>?
+    private var sleepTask: Task<Void, Never>?
+
+    /// Seconds of idle before the fox falls asleep.
+    private static let sleepDelay: TimeInterval = 30
+    /// Duration of the stretch animation before capture begins.
+    private static let stretchDuration: TimeInterval = 1.2
+
+    @MainActor
+    private func runFlow() async {
+        cancelSleep()
+
+        // Wake up with a stretch if currently sleeping
+        if foxState == .sleeping {
+            foxState = .stretching
+            try? await Task.sleep(for: .seconds(FoxStore.stretchDuration))
+        }
+
+        foxState = .capturing
+        bubble = nil
+
+        // 1. Show capture overlay — user drags a region or clicks a window
+        guard let captureResult = await CaptureOverlayController.present() else {
+            transitionToIdle()
+            return
+        }
+
+        // 2. Show the message input bar anchored to the captured frame
+        let rawMessage = await MessageInputController.present(near: captureResult.frame)
+
+        guard let rawMessage else {
+            transitionToIdle()
+            return
+        }
+
+        foxState = .thinking
+
+        // 3. Ask Claude — image always included; message text is optional
+        do {
+            let prompt = rawMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = prompt.isEmpty
+                ? "What's happening on my screen? React as FoxBuddy."
+                : prompt
+            let response = try await ClaudeAPIService.shared.ask(
+                prompt: text,
+                image: captureResult.image
+            )
+            bubble = SpeechBubble(content: response)
+            foxState = .speaking
+            scheduleDismiss()
+        } catch {
+            bubble = SpeechBubble(content: "Oops — \(error.localizedDescription)")
+            foxState = .error(error.localizedDescription)
+            scheduleDismiss()
+        }
+    }
+
+    /// Moves to idle and starts the sleep countdown.
+    private func transitionToIdle() {
+        foxState = .idle
+        scheduleSleep()
+    }
 
     private func scheduleDismiss() {
         dismissTask?.cancel()
@@ -145,5 +104,23 @@ final class FoxStore {
             guard !Task.isCancelled else { return }
             await MainActor.run { self.dismissBubble() }
         }
+    }
+
+    private func scheduleSleep() {
+        sleepTask?.cancel()
+        sleepTask = Task {
+            try? await Task.sleep(for: .seconds(FoxStore.sleepDelay))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                if self.foxState == .idle {
+                    self.foxState = .sleeping
+                }
+            }
+        }
+    }
+
+    private func cancelSleep() {
+        sleepTask?.cancel()
+        sleepTask = nil
     }
 }

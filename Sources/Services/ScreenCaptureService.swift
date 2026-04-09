@@ -67,7 +67,48 @@ final class ScreenCaptureService {
         return NSImage(cgImage: cgImage, size: window.frame.size)
     }
 
-    // MARK: - Thumbnail capture (for window picker)
+    // MARK: - On-screen window list (no thumbnails — for overlay hover-highlight)
+
+    /// Returns all on-screen windows (excluding FoxBuddy) without fetching thumbnails.
+    /// Used by the capture overlay to know window positions for hover-highlight and click-to-capture.
+    func getOnScreenWindows() async throws -> [SCWindow] {
+        let content = try await SCShareableContent.current
+        return content.windows.filter {
+            $0.isOnScreen &&
+            $0.frame.width > 100 &&
+            $0.frame.height > 100 &&
+            $0.owningApplication?.bundleIdentifier != Bundle.main.bundleIdentifier
+        }
+    }
+
+    // MARK: - Region capture (for drag-to-select)
+
+    /// Captures a rectangular region of the main display using CGDisplayCreateImageForRect.
+    /// `rect` is in AppKit screen coordinates (origin at bottom-left of screen, in points).
+    func captureRegion(_ rect: CGRect) async throws -> NSImage {
+        let displayID = CGMainDisplayID()
+        let screenHeightPx = CGFloat(CGDisplayPixelsHigh(displayID))
+        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
+
+        // Convert AppKit points (Y=0 at bottom-left) → CG pixels (Y=0 at top-left)
+        let pixelRect = CGRect(
+            x: rect.origin.x * scale,
+            y: screenHeightPx - (rect.origin.y + rect.height) * scale,
+            width: rect.width * scale,
+            height: rect.height * scale
+        )
+
+        guard let cgImage = CGDisplayCreateImage(displayID, rect: pixelRect) else {
+            throw NSError(
+                domain: "FoxBuddy",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "CGDisplayCreateImageForRect returned nil"]
+            )
+        }
+        return NSImage(cgImage: cgImage, size: rect.size)
+    }
+
+    // MARK: - Thumbnail capture (for future use)
 
     private func captureThumbnail(window: SCWindow) async throws -> NSImage {
         let filter = SCContentFilter(desktopIndependentWindow: window)
