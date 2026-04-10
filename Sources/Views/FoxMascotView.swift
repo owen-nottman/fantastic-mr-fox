@@ -39,18 +39,19 @@ final class FoxGIFLibrary {
 
     func image(for state: FoxState) -> NSImage? {
         switch state {
-        case .idle, .capturing, .error: return idle
-        case .sleeping:                  return sleeping ?? idle
-        case .stretching:                return stretching ?? idle
-        case .thinking:                  return thinking ?? idle
-        case .speaking:                  return speaking ?? idle
+        case .idle, .capturing, .awaitingInput, .error: return idle
+        case .sleeping:                                  return sleeping ?? idle
+        case .stretching:                                return stretching ?? idle
+        case .thinking:                                  return thinking ?? idle
+        case .speaking:                                  return speaking ?? idle
         }
     }
 }
 
 private extension NSImage {
     static func foxGIF(named name: String) -> NSImage? {
-        guard let url = Bundle.main.url(forResource: name, withExtension: "gif") else { return nil }
+        guard let url = Bundle.module.url(forResource: name, withExtension: "gif",
+                                          subdirectory: "Animations") else { return nil }
         return NSImage(contentsOf: url)
     }
 }
@@ -64,7 +65,6 @@ struct FoxMascotView: View {
     let store: FoxStore
 
     @State private var isHovered = false
-    @State private var bounce = false
 
     private let gifs = FoxGIFLibrary.shared
 
@@ -72,7 +72,7 @@ struct FoxMascotView: View {
         Group {
             if gifs.hasGIFs, let image = gifs.image(for: store.foxState) {
                 AnimatedGIFView(image: image)
-                    .frame(width: 80, height: 80)
+                    .frame(width: 180, height: 180)
             } else {
                 Text("🦊")
                     .font(.system(size: 52))
@@ -80,14 +80,9 @@ struct FoxMascotView: View {
             }
         }
         .scaleEffect(isHovered ? 1.12 : 1.0)
-        .offset(y: bounce ? -4 : 0)
-        .animation(.easeInOut(duration: 0.45).repeatForever(autoreverses: true), value: bounce)
         .animation(.spring(response: 0.25, dampingFraction: 0.6), value: isHovered)
         .onHover { isHovered = $0 }
         .onTapGesture { store.trigger() }
-        .onChange(of: store.foxState) { _, newState in
-            bounce = (newState == .thinking)
-        }
         .help("Tap or press ⌥F to ask FoxBuddy")
     }
 }

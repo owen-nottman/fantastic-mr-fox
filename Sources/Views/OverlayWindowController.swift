@@ -65,7 +65,8 @@ final class OverlayWindowController {
 
         let screen = NSScreen.main ?? NSScreen.screens[0]
         let screenFrame = screen.visibleFrame
-        let size = CGSize(width: 160, height: 200) // enough room for fox + bubble above it
+        // Wider + taller to accommodate the conversation panel above the fox
+        let size = CGSize(width: 340, height: 600)
         let origin = CGPoint(
             x: screenFrame.maxX - size.width - 16,
             y: screenFrame.minY + 16
@@ -75,6 +76,13 @@ final class OverlayWindowController {
         p.contentView = NSHostingView(rootView: FoxOverlayView(store: store))
         // orderFront — NOT makeKeyAndOrderFront — leaves focus with the current app
         p.orderFront(nil)
+
+        // When the fox enters .awaitingInput, make the panel key so the
+        // integrated SwiftUI TextField can become first responder.
+        store.onNeedsKeyFocus = { [weak p] in
+            p?.makeKey()
+        }
+
         self.panel = p
     }
 }

@@ -9,38 +9,55 @@ final class FoxStore {
 
     // MARK: - State
 
-    /// Drives fox animation and bubble visibility.
+    /// Drives fox animation and conversation panel visibility.
     var foxState: FoxState = .idle
 
-    /// The current speech bubble. Non-nil while the fox is speaking.
-    var bubble: SpeechBubble?
+    /// Full session conversation history.
+    var messages: [ConversationMessage] = []
+
+    /// True while the Claude API call is in flight (shows typing indicator).
+    var isTyping = false
+
+    // MARK: - Focus callback
+
+    /// Called when the overlay panel should become key (integrated input needs focus).
+    /// Set by OverlayWindowController after creating the panel.
+    var onNeedsKeyFocus: (() -> Void)?
 
     // MARK: - Trigger
 
-    /// Starts the full capture → input → Claude → bubble flow.
-    /// Safe to call from any sync context; the async work runs in a Task.
+    /// Starts the full capture → input → Claude → conversation flow.
     func trigger() {
         guard foxState == .idle || foxState == .sleeping || foxState == .stretching else { return }
         Task { @MainActor in await runFlow() }
     }
 
-    // MARK: - Bubble dismiss
+    // MARK: - Integrated input
 
-    func dismissBubble() {
-        dismissTask?.cancel()
-        bubble = nil
-        transitionToIdle()
+    private var inputContinuation: CheckedContinuation<String?, Never>?
+
+    /// Called by ConversationView when the user submits a message.
+    func submitMessage(_ text: String) {
+        inputContinuation?.resume(returning: text)
+        inputContinuation = nil
+    }
+
+    /// Called by ConversationView when the user presses Escape.
+    func cancelInput() {
+        inputContinuation?.resume(returning: nil)
+        inputContinuation = nil
     }
 
     // MARK: - Private
 
-    private var dismissTask: Task<Void, Never>?
     private var sleepTask: Task<Void, Never>?
 
     /// Seconds of idle before the fox falls asleep.
-    private static let sleepDelay: TimeInterval = 30
+    private static let sleepDelay: TimeInterval = 120
     /// Duration of the stretch animation before capture begins.
-    private static let stretchDuration: TimeInterval = 1.2
+    private static let stretchDuration: TimeInterval = 2.0
+    /// How long the speaking animation plays before returning to idle.
+    private static let speakingDuration: TimeInterval = 2.5
 
     @MainActor
     private func runFlow() async {
@@ -53,7 +70,6 @@ final class FoxStore {
         }
 
         foxState = .capturing
-        bubble = nil
 
         // 1. Show capture overlay — user drags a region or clicks a window
         guard let captureResult = await CaptureOverlayController.present() else {
@@ -61,19 +77,30 @@ final class FoxStore {
             return
         }
 
-        // 2. Show the message input bar anchored to the captured frame
-        let rawMessage = await MessageInputController.present(near: captureResult.frame)
+        // 2. Focus the integrated input in the conversation panel
+        foxState = .awaitingInput
+        onNeedsKeyFocus?()
+
+        let rawMessage: String? = await withCheckedContinuation { continuation in
+            self.inputContinuation = continuation
+        }
 
         guard let rawMessage else {
             transitionToIdle()
             return
         }
 
+        // 3. Add the user's message to the conversation (skip if empty prompt)
+        let prompt = rawMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !prompt.isEmpty {
+            messages.append(ConversationMessage(sender: .user, content: prompt))
+        }
+
+        isTyping = true
         foxState = .thinking
 
-        // 3. Ask Claude — image always included; message text is optional
+        // 4. Ask Claude — image always included; message text is optional
         do {
-            let prompt = rawMessage.trimmingCharacters(in: .whitespacesAndNewlines)
             let text = prompt.isEmpty
                 ? "What's happening on my screen? React as FoxBuddy."
                 : prompt
@@ -81,29 +108,24 @@ final class FoxStore {
                 prompt: text,
                 image: captureResult.image
             )
-            bubble = SpeechBubble(content: response)
+            messages.append(ConversationMessage(sender: .fox, content: response))
+            isTyping = false
             foxState = .speaking
-            scheduleDismiss()
         } catch {
-            bubble = SpeechBubble(content: "Oops — \(error.localizedDescription)")
+            messages.append(ConversationMessage(sender: .fox, content: "Oops — \(error.localizedDescription)"))
+            isTyping = false
             foxState = .error(error.localizedDescription)
-            scheduleDismiss()
         }
+
+        // Brief speaking/error animation, then return to idle
+        try? await Task.sleep(for: .seconds(FoxStore.speakingDuration))
+        transitionToIdle()
     }
 
     /// Moves to idle and starts the sleep countdown.
     private func transitionToIdle() {
         foxState = .idle
         scheduleSleep()
-    }
-
-    private func scheduleDismiss() {
-        dismissTask?.cancel()
-        dismissTask = Task {
-            try? await Task.sleep(for: .seconds(SpeechBubble.autoDismissInterval))
-            guard !Task.isCancelled else { return }
-            await MainActor.run { self.dismissBubble() }
-        }
     }
 
     private func scheduleSleep() {

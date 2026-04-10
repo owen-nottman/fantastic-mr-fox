@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import Security
 
 /// Sends text + optional window screenshot to Claude's Messages API and returns the response.
 final class ClaudeAPIService {
@@ -8,10 +9,28 @@ final class ClaudeAPIService {
 
     private let apiURL = URL(string: "https://api.anthropic.com/v1/messages")!
 
-    /// Read from the environment so the key is never baked into source code.
+    /// Reads from the environment first, then falls back to the macOS Keychain.
+    /// This ensures the key is available whether or not the shell sourced .zshrc.
     private var apiKey: String? {
-        let key = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"]
-        return (key?.isEmpty == false) ? key : nil
+        if let key = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"], !key.isEmpty {
+            return key
+        }
+        return keychainAPIKey()
+    }
+
+    private func keychainAPIKey() -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "ANTHROPIC_API_KEY",
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data,
+              let key = String(data: data, encoding: .utf8),
+              !key.isEmpty else { return nil }
+        return key
     }
 
     private let systemPrompt = """
