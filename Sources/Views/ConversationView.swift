@@ -1,48 +1,75 @@
 import SwiftUI
 
-// MARK: - Fox colour palette
-
-/// Shared design tokens used across the conversation UI.
-enum FoxTheme {
-    /// Burnt sienna — primary fox-fur orange.  #E8632A
-    static let orange      = Color(red: 0.910, green: 0.388, blue: 0.165)
-    /// Soft peachy orange — user bubble fill.  #F4956A
-    static let lightOrange = Color(red: 0.957, green: 0.584, blue: 0.416)
-    /// Warm cream — fox bubble fill.           #FFF3E6
-    static let cream       = Color(red: 1.000, green: 0.953, blue: 0.902)
-    /// Panel background cream.                 #FFF8F0
-    static let creamPanel  = Color(red: 1.000, green: 0.973, blue: 0.941)
-    /// Input row tint.                         #FFF0E0
-    static let creamInput  = Color(red: 1.000, green: 0.941, blue: 0.878)
-    /// Dark fox-brown for text on light bgs.   #2D1A08
-    static let darkBrown   = Color(red: 0.176, green: 0.102, blue: 0.031)
-}
-
-// MARK: - ConversationView
-
 /// The chat panel that floats above the fox mascot.
-/// Shows the full session history, a typing indicator, and an integrated input field.
+///
+/// Structure (top to bottom):
+///   Panel bar — icon, title "Kit", decorative traffic lights
+///   Progress bar — animated orange strip shown while typing
+///   Message list — scrollable conversation history
+///   Input row — creamInput-tinted text field + send button
 struct ConversationView: View {
-    let store: FoxStore
+    let store: KitStore
 
     @State private var inputText = ""
     @FocusState private var isInputFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
+            panelBar
+            progressBar
             messageList
-            inputDivider
-            inputRow
+            if store.foxState == .awaitingInput {
+                inputRow
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
-        .background(FoxTheme.creamPanel.opacity(0.97))
+        .background(KitTheme.creamPanel.opacity(0.97))
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .shadow(color: FoxTheme.orange.opacity(0.18), radius: 20, x: 0, y: 6)
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(KitTheme.border, lineWidth: 1)
+        }
+        .shadow(color: KitTheme.orange.opacity(0.18), radius: 20, x: 0, y: 6)
         .onChange(of: store.foxState) { _, newState in
+            // Auto-focus the field when input row appears
             isInputFocused = (newState == .awaitingInput)
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: store.foxState == .awaitingInput)
+    }
+
+    // MARK: - Panel bar
+
+    private var panelBar: some View {
+        HStack(spacing: 7) {
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(KitTheme.orange)
+                .frame(width: 20, height: 20)
+                .overlay { Text("🦊").font(.system(size: 12)) }
+
+            Text("Kit")
+                .font(KitTheme.label())
+                .foregroundStyle(KitTheme.darkBrown)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .frame(height: 40)
+        .background(KitTheme.creamPanel)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(KitTheme.borderLight).frame(height: 0.5)
         }
     }
 
-    // MARK: - Subviews
+    // MARK: - Progress bar (shown while typing)
+
+    @ViewBuilder
+    private var progressBar: some View {
+        if store.isTyping {
+            IndeterminateProgressBar()
+                .frame(height: 4)
+                .transition(.opacity)
+        }
+    }
+
+    // MARK: - Message list
 
     private var messageList: some View {
         ScrollViewReader { proxy in
@@ -55,9 +82,10 @@ struct ConversationView: View {
                         TypingIndicatorView()
                             .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
                     }
-                    // Anchor for auto-scroll
                     Color.clear.frame(height: 1).id("bottom")
                 }
+                // Essential: forces the stack (and its children) to fill the scroll view width
+                .frame(maxWidth: .infinity)
                 .padding(.horizontal, 12)
                 .padding(.top, 14)
                 .padding(.bottom, 8)
@@ -79,46 +107,60 @@ struct ConversationView: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: store.isTyping)
     }
 
-    private var inputDivider: some View {
-        Rectangle()
-            .fill(FoxTheme.orange.opacity(0.2))
-            .frame(height: 1)
-    }
+    // MARK: - Input row
 
     private var inputRow: some View {
         HStack(spacing: 8) {
-            TextField("Ask FoxBuddy…", text: $inputText)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13))
-                .foregroundStyle(FoxTheme.darkBrown)
-                .focused($isInputFocused)
-                .disabled(store.foxState != .awaitingInput)
-                .onSubmit { submit() }
-                .onExitCommand { cancel() }
+            TextField(
+                "",
+                text: $inputText,
+                prompt: Text("Ask Kit…").foregroundStyle(KitTheme.darkBrown.opacity(0.40))
+            )
+            .textFieldStyle(.plain)
+            .font(KitTheme.body())
+            .foregroundStyle(KitTheme.darkBrown)
+            .focused($isInputFocused)
+            .onSubmit { submit() }
+            .onExitCommand { cancel() }
 
             if store.foxState == .awaitingInput {
-                Button(action: submit) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 20))
-                        .foregroundStyle(
-                            inputText.trimmingCharacters(in: .whitespaces).isEmpty
-                                ? FoxTheme.orange.opacity(0.35)
-                                : FoxTheme.orange
-                        )
-                }
-                .buttonStyle(.plain)
-                .transition(.scale(scale: 0.7).combined(with: .opacity))
+                sendButton
+                    .transition(.scale(scale: 0.7).combined(with: .opacity))
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
+        .padding(.horizontal, 13)
+        .padding(.vertical, 9)
         .background(
-            isInputFocused
-                ? FoxTheme.creamInput
-                : FoxTheme.creamPanel.opacity(0.6)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(KitTheme.creamInput)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(KitTheme.darkBrown.opacity(isInputFocused ? 0.25 : 0.15), lineWidth: 1)
+                }
         )
+        .padding(.horizontal, 10)
+        .padding(.vertical, 10)
+        .background(KitTheme.creamPanel)
+        .overlay(alignment: .top) {
+            Rectangle().fill(KitTheme.borderLight).frame(height: 0.5)
+        }
         .animation(.easeInOut(duration: 0.2), value: isInputFocused)
         .animation(.spring(response: 0.3, dampingFraction: 0.75), value: store.foxState == .awaitingInput)
+    }
+
+    private var sendButton: some View {
+        let hasText = !inputText.trimmingCharacters(in: .whitespaces).isEmpty
+        return Button(action: submit) {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(KitTheme.orange.opacity(hasText ? 1 : 0.35))
+                .frame(width: 30, height: 30)
+                .overlay {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Actions
@@ -135,42 +177,29 @@ struct ConversationView: View {
     }
 }
 
-// MARK: - MessageBubbleView
+// MARK: - Indeterminate progress bar
 
-private struct MessageBubbleView: View {
-    let message: ConversationMessage
+/// Animated orange strip that slides across the panel bar while Kit is thinking.
+private struct IndeterminateProgressBar: View {
+    @State private var offset: CGFloat = -1
 
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            if message.sender == .user { Spacer(minLength: 40) }
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Rectangle()
+                    .fill(KitTheme.darkBrown.opacity(0.08))
 
-            Text(message.content)
-                .font(.system(size: 13))
-                .lineSpacing(2)
-                .foregroundStyle(message.sender == .user ? .white : FoxTheme.darkBrown)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background {
-                    if message.sender == .user {
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(FoxTheme.lightOrange)
-                    } else {
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(FoxTheme.cream)
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .strokeBorder(FoxTheme.orange.opacity(0.32), lineWidth: 1.5)
-                            }
-                    }
-                }
-
-            if message.sender == .fox { Spacer(minLength: 40) }
+                Rectangle()
+                    .fill(KitTheme.orange)
+                    .frame(width: geo.size.width * 0.35)
+                    .offset(x: offset * geo.size.width)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
-        .transition(.asymmetric(
-            insertion: .scale(scale: 0.88, anchor: message.sender == .user ? .bottomTrailing : .bottomLeading)
-                .combined(with: .opacity),
-            removal: .opacity
-        ))
+        .clipShape(Rectangle())
+        .onAppear {
+            withAnimation(.linear(duration: 1.1).repeatForever(autoreverses: false)) {
+                offset = 1
+            }
+        }
     }
 }

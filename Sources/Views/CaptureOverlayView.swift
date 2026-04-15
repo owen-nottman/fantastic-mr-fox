@@ -42,22 +42,22 @@ final class CaptureOverlayView: NSView {
         NSColor.black.withAlphaComponent(0.45).setFill()
         bounds.fill()
 
-        // Highlight the hovered window with a border
+        // Highlight the hovered window with an orange border (Kit brand)
         if let win = highlightedWindow {
             let r = win.frame
-            NSColor.white.withAlphaComponent(0.12).setFill()
+            NSColor(red: 0.910, green: 0.388, blue: 0.165, alpha: 0.15).setFill()
             r.fill()
-            NSColor.white.withAlphaComponent(0.9).setStroke()
+            NSColor(red: 0.910, green: 0.388, blue: 0.165, alpha: 0.9).setStroke()
             let border = NSBezierPath(roundedRect: r, xRadius: 4, yRadius: 4)
             border.lineWidth = 2
             border.stroke()
         }
 
-        // Draw the drag-selection rectangle
+        // Draw the drag-selection rectangle in orange
         if let rect = selectionRect, rect.width > 4, rect.height > 4 {
-            NSColor.white.withAlphaComponent(0.15).setFill()
+            NSColor(red: 0.910, green: 0.388, blue: 0.165, alpha: 0.15).setFill()
             rect.fill()
-            NSColor.white.withAlphaComponent(0.9).setStroke()
+            NSColor(red: 0.910, green: 0.388, blue: 0.165, alpha: 0.9).setStroke()
             let sel = NSBezierPath(rect: rect)
             sel.lineWidth = 1.5
             sel.stroke()

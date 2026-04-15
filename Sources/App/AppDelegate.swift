@@ -4,7 +4,7 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Single source of truth for all UI state
-    private let store = FoxStore()
+    private let store = KitStore()
 
     private var overlayController: OverlayWindowController!
     private let hotkeyService = HotkeyService()
@@ -14,7 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Launch
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Hide from Dock and app switcher — FoxBuddy lives in the menu bar only
+        // Hide from Dock and app switcher — Kit lives in the menu bar only
         NSApp.setActivationPolicy(.accessory)
 
         overlayController = OverlayWindowController(store: store)
@@ -37,13 +37,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
 
-        let askItem = NSMenuItem(title: "Ask FoxBuddy…  ⌥F", action: #selector(triggerFox), keyEquivalent: "")
+        let askItem = NSMenuItem(title: "Ask Kit…  ⌥F", action: #selector(triggerKit), keyEquivalent: "")
         askItem.target = self
         menu.addItem(askItem)
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "Quit FoxBuddy", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Quit Kit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quitItem)
 
         statusItem?.menu = menu
@@ -58,7 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyService.start()
     }
 
-    @objc private func triggerFox() {
+    @objc private func triggerKit() {
         store.trigger()
     }
 }

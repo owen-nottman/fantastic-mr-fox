@@ -62,7 +62,7 @@ private extension NSImage {
 /// Shows an animated GIF if fox_idle.gif is present in Resources/Animations/,
 /// otherwise renders the fox emoji with hover + bounce animations.
 struct FoxMascotView: View {
-    let store: FoxStore
+    let store: KitStore
 
     @State private var isHovered = false
 
@@ -83,6 +83,6 @@ struct FoxMascotView: View {
         .animation(.spring(response: 0.25, dampingFraction: 0.6), value: isHovered)
         .onHover { isHovered = $0 }
         .onTapGesture { store.trigger() }
-        .help("Tap or press ⌥F to ask FoxBuddy")
+        .help("Tap or press ⌥F to ask Kit")
     }
 }

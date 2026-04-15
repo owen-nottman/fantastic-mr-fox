@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Root SwiftUI view hosted inside the always-visible overlay panel.
 /// Stacks the conversation panel above the fox mascot; both slide in/out with springs.
-struct FoxOverlayView: View {
-    let store: FoxStore
+struct KitOverlayView: View {
+    let store: KitStore
 
     private var showConversation: Bool {
         !store.messages.isEmpty || store.isTyping || store.foxState == .awaitingInput

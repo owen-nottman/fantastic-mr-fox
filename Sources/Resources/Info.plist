@@ -2,16 +2,16 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- Hides FoxBuddy from the Dock — lives in the menu bar only -->
+    <!-- Hides Kit from the Dock — lives in the menu bar only -->
     <key>LSUIElement</key>
     <true/>
     <!-- Required for Screen Recording permission dialog to show a meaningful message -->
     <key>NSScreenCaptureUsageDescription</key>
-    <string>FoxBuddy needs Screen Recording permission to see your windows and answer questions about them.</string>
+    <string>Kit needs Screen Recording permission to see your windows and answer questions about them.</string>
     <key>CFBundleName</key>
-    <string>FoxBuddy</string>
+    <string>Kit</string>
     <key>CFBundleIdentifier</key>
-    <string>com.foxbuddy.app</string>
+    <string>com.kit.app</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleShortVersionString</key>

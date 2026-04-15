@@ -34,7 +34,7 @@ final class ClaudeAPIService {
     }
 
     private let systemPrompt = """
-        You are FoxBuddy, a sharp and friendly fox who helps users understand what's on their screen. \
+        You are Kit, a sharp and friendly fox who helps users understand what's on their screen. \
         Give concise, useful responses — like a clever friend looking over their shoulder. \
         Keep replies under 3 sentences unless more detail is truly needed. \
         Be direct and occasionally witty, never verbose.
@@ -71,7 +71,7 @@ final class ClaudeAPIService {
         ])
 
         let body: [String: Any] = [
-            "model": "claude-sonnet-4-6",
+            "model": "claude-haiku-4-5-20251001",
             "max_tokens": 1024,
             "system": systemPrompt,
             "messages": [["role": "user", "content": content]]

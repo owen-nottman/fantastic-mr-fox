@@ -2,10 +2,10 @@ import Foundation
 import AppKit
 import Observation
 
-/// Central state machine for FoxBuddy.
+/// Central state machine for Kit.
 /// AppDelegate and all views share a single instance of this class.
 @Observable
-final class FoxStore {
+final class KitStore {
 
     // MARK: - State
 
@@ -66,7 +66,7 @@ final class FoxStore {
         // Wake up with a stretch if currently sleeping
         if foxState == .sleeping {
             foxState = .stretching
-            try? await Task.sleep(for: .seconds(FoxStore.stretchDuration))
+            try? await Task.sleep(for: .seconds(KitStore.stretchDuration))
         }
 
         foxState = .capturing
@@ -102,7 +102,7 @@ final class FoxStore {
         // 4. Ask Claude — image always included; message text is optional
         do {
             let text = prompt.isEmpty
-                ? "What's happening on my screen? React as FoxBuddy."
+                ? "What's happening on my screen? React as Kit."
                 : prompt
             let response = try await ClaudeAPIService.shared.ask(
                 prompt: text,
@@ -118,7 +118,7 @@ final class FoxStore {
         }
 
         // Brief speaking/error animation, then return to idle
-        try? await Task.sleep(for: .seconds(FoxStore.speakingDuration))
+        try? await Task.sleep(for: .seconds(KitStore.speakingDuration))
         transitionToIdle()
     }
 
@@ -131,7 +131,7 @@ final class FoxStore {
     private func scheduleSleep() {
         sleepTask?.cancel()
         sleepTask = Task {
-            try? await Task.sleep(for: .seconds(FoxStore.sleepDelay))
+            try? await Task.sleep(for: .seconds(KitStore.sleepDelay))
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 if self.foxState == .idle {

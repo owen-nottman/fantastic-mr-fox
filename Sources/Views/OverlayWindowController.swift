@@ -54,9 +54,9 @@ final class OverlayPanel: NSPanel {
 /// Uses `orderFront` (never `makeKeyAndOrderFront`) so focus is never stolen.
 final class OverlayWindowController {
     private var panel: OverlayPanel?
-    private let store: FoxStore
+    private let store: KitStore
 
-    init(store: FoxStore) {
+    init(store: KitStore) {
         self.store = store
     }
 
@@ -66,14 +66,14 @@ final class OverlayWindowController {
         let screen = NSScreen.main ?? NSScreen.screens[0]
         let screenFrame = screen.visibleFrame
         // Wider + taller to accommodate the conversation panel above the fox
-        let size = CGSize(width: 340, height: 600)
+        let size = CGSize(width: 420, height: 620)
         let origin = CGPoint(
             x: screenFrame.maxX - size.width - 16,
             y: screenFrame.minY + 16
         )
 
         let p = OverlayPanel(contentRect: NSRect(origin: origin, size: size))
-        p.contentView = NSHostingView(rootView: FoxOverlayView(store: store))
+        p.contentView = NSHostingView(rootView: KitOverlayView(store: store))
         // orderFront — NOT makeKeyAndOrderFront — leaves focus with the current app
         p.orderFront(nil)
 
